@@ -1,0 +1,8 @@
+# 忽略游戏存档
+save_game.json
+
+# 忽略游戏日志
+game_log.txt
+
+# 忽略 README
+README.md
