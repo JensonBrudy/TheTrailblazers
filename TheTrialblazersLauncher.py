@@ -51,18 +51,17 @@ class Character:
     def rank_up(self):
         self.max_hp += 20
         self.atk += 5
-        self.hp = self.max_hp
-        print(f"{self.name} leveled up to Rank {self.rank}! HP: {self.max_hp}, ATK: {self.atk}")
+        print(f"{self.name} leveled up to Rank {self.rank}! Max HP: {self.max_hp}, ATK: {self.atk}")
         log_event(f"{self.name} leveled up. New rank={self.rank}")
 
     def attack_target(self, target):
         raw_damage = self.atk - target.defense + random.randint(-5, 10)
         damage = max(raw_damage, 0)
         target.take_damage(damage)
-        self.gain_exp(damage)
-        target.gain_exp(target.defense)
-        if raw_damage > 10: target.gain_exp(int(0.2 * target.defense))
-        elif raw_damage <= 0: target.gain_exp(int(0.5 * target.defense))
+        self.gain_exp(damage // 2)
+        target.gain_exp(target.defense // 4)
+        if raw_damage > 10: target.gain_exp(int(0.05 * target.defense))
+        elif raw_damage <= 0: target.gain_exp(int(0.1 * target.defense))
         return damage
 
     def to_dict(self): return self.__dict__.copy()
