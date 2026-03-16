@@ -32,6 +32,9 @@ class Character:
     def short_status(self): return f"{self.name}(HP={self.hp})"
     def is_defeated(self): return self.hp <= 0
     def heal_full(self): self.hp = self.max_hp
+    def heal(self, amount):
+        self.hp = min(self.max_hp, self.hp + amount)
+        print(f"{self.name} healed for {amount} HP. Current HP: {self.hp}/{self.max_hp}")
 
     def take_damage(self, damage):
         self.hp = max(0, self.hp - damage)
@@ -72,7 +75,7 @@ class Character:
 
 class Team:
     def __init__(self):
-        self.units, self.coins = [], 100
+        self.units, self.coins, self.inventory = [], 100, {}
 
     def add_unit(self, unit): self.units.append(unit)
     def alive_units(self): return [unit for unit in self.units if not unit.is_defeated()]
@@ -82,6 +85,11 @@ class Team:
     def display_team(self):
         for unit in self.units: unit.display_info()
         print(f"Coins: {self.coins}")
+        if self.inventory:
+            items_str = ", ".join(f"{name} x{count}" for name, count in self.inventory.items())
+            print(f"Inventory: {items_str}")
+        else:
+            print("Inventory: Empty")
 
     def status_snapshot(self): return ", ".join(unit.short_status() for unit in self.units)
 
@@ -99,13 +107,14 @@ class Team:
         log_event(f"Recruited {unit.name} ({unit.profession}); HP={unit.max_hp}, ATK={unit.atk}, DEF={unit.defense}; Coins Remaining={self.coins}")
         return True
 
-    def to_dict(self): return {"units": [unit.to_dict() for unit in self.units], "coins": self.coins}
+    def to_dict(self): return {"units": [unit.to_dict() for unit in self.units], "coins": self.coins, "inventory": self.inventory}
 
     @staticmethod
     def from_dict(data):
         team = Team()
         team.units = [Character.from_dict(unit) for unit in data.get("units", [])]
         team.coins = data.get("coins", 100)
+        team.inventory = data.get("inventory", {})
         return team
 
 def setup_player_team():
@@ -272,24 +281,89 @@ def handle_battle_outcome(result, player_team, ai_team):
         return player_team, ai_team, True
     return player_team, ai_team, False
 
+def run_shop(team):
+    items = {"Small Potion": {"price": 20, "heal": 30}, "Large Potion": {"price": 50, "heal": 100}}
+    while True:
+        print(f"\n=== Welcome to the Shop! (Coins: {team.coins}) ===")
+        for i, (name, info) in enumerate(items.items(), 1):
+            print(f"{i}. {name} - {info['price']} Coins (Heals {info['heal']} HP)")
+        print(f"{len(items) + 1}. Exit Shop")
+        
+        choice = input(f"What would you like to buy? (1-{len(items) + 1}): ").strip()
+        if choice == str(len(items) + 1): break
+        
+        if choice.isdigit() and 1 <= int(choice) <= len(items):
+            item_name = list(items.keys())[int(choice) - 1]
+            price = items[item_name]["price"]
+            if team.coins >= price:
+                team.coins -= price
+                team.inventory[item_name] = team.inventory.get(item_name, 0) + 1
+                print(f"Purchased {item_name}! Remaining Coins: {team.coins}")
+                log_event(f"Purchased {item_name} for {price} coins. Remaining coins: {team.coins}")
+            else:
+                print("You don't have enough coins!")
+        else:
+            print("Invalid choice.")
+
+def manage_inventory(team):
+    items_info = {"Small Potion": {"heal": 30}, "Large Potion": {"heal": 100}}
+    while True:
+        if not team.inventory:
+            print("\nYour inventory is empty.")
+            break
+        
+        print("\n=== Your Inventory ===")
+        current_items = list(team.inventory.keys())
+        for i, name in enumerate(current_items, 1):
+            print(f"{i}. {name} x{team.inventory[name]}")
+        print(f"{len(current_items) + 1}. Back")
+        
+        choice = input(f"Select an item to use (1-{len(current_items) + 1}): ").strip()
+        if choice == str(len(current_items) + 1): break
+        
+        if choice.isdigit() and 1 <= int(choice) <= len(current_items):
+            item_name = current_items[int(choice) - 1]
+            alive = team.alive_units()
+            if not alive:
+                print("No alive units to use item on.")
+                continue
+            
+            print(f"\nUse {item_name} on which character?")
+            for i, unit in enumerate(alive, 1):
+                print(f"{i}. {unit.name} (HP: {unit.hp}/{unit.max_hp})")
+            
+            target_choice = prompt_index(f"Enter character number (1-{len(alive)}): ", len(alive))
+            target = alive[target_choice]
+            
+            heal_amount = items_info[item_name]["heal"]
+            target.heal(heal_amount)
+            team.inventory[item_name] -= 1
+            if team.inventory[item_name] <= 0:
+                del team.inventory[item_name]
+            log_event(f"Used {item_name} on {target.name}. Healed {heal_amount} HP.")
+        else:
+            print("Invalid choice.")
+
 def game_loop(start_from_save=False):
     player_team, ai_team = prepare_game(start_from_save)
     show_matchup(player_team, ai_team)
     while True:
-        print("\n=== Adventure Menu ===\n1. Start the Battle\n2. Recruit New Teammate(s) (50 Coins each)\n3. Save Game\n4. Exit\n5. Autobattle")
-        choice = input("\nPlease Enter your choice (1 to 5): ").strip()
-        if choice in ("1", "5"):
+        print("\n=== Adventure Menu ===\n1. Start the Battle\n2. Recruit New Teammate(s) (50 Coins each)\n3. Visit Shop\n4. View Inventory/Use Items\n5. Save Game\n6. Exit\n7. Autobattle")
+        choice = input("\nPlease Enter your choice (1 to 7): ").strip()
+        if choice in ("1", "7"):
             result = (battle_loop if choice == "1" else auto_battle_loop)(player_team, ai_team)
             player_team, ai_team, should_exit = handle_battle_outcome(result, player_team, ai_team)
             if should_exit: return
             show_matchup(player_team, ai_team)
         elif choice == "2": recruit_units(player_team)
-        elif choice == "3": save_game(player_team, ai_team)
-        elif choice == "4":
+        elif choice == "3": run_shop(player_team)
+        elif choice == "4": manage_inventory(player_team)
+        elif choice == "5": save_game(player_team, ai_team)
+        elif choice == "6":
             save_game(player_team, ai_team)
             print("\nGame Auto-Saved. See You Again Soon!")
             return
-        else: print("Invalid Choice. Please Enter an Option From 1 to 5.")
+        else: print("Invalid Choice. Please Enter an Option From 1 to 7.")
 
 def main():
     while True:
