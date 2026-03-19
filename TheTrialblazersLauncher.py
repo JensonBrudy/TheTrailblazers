@@ -170,17 +170,39 @@ def resolve_attack(attacker, target, attacking_team, team_name):
 
 def choose_player_target(player, enemy_team):
     alive = enemy_team.alive_units()
-    print(f"\n--- It's {player.name}'s Turn. Choose a Target to Attack ---")
-    for index, enemy in enumerate(alive, 1): print(f"  {index}. {enemy.name} (HP: {enemy.hp}, DEF: {enemy.defense})")
-    target = alive[prompt_index(f"\nEnter Target Number (1-{len(alive)}): ", len(alive))]
-    input(f"\n{player.name} prepares to attack {target.name}. Press [Enter] to confirm attack.")
-    return target
+    while True:
+        print(f"\n--- It's {player.name}'s Turn. Choose a Target to Attack ---")
+        for index, enemy in enumerate(alive, 1):
+            print(f"  {index}. {enemy.name} (HP: {enemy.hp}, DEF: {enemy.defense})")
+        print(f"  0. Withdraw from Battle (Go to Shop/Inventory)")
+        
+        choice = input(f"\nEnter Target Number (1-{len(alive)}) or 0 to Withdraw: ").strip()
+        
+        if choice == '0':
+            if input("Confirm withdrawal? (y/n): ").strip().lower() == 'y':
+                return "withdraw"
+            continue
+            
+        if choice.isdigit() and 1 <= int(choice) <= len(alive):
+            target = alive[int(choice) - 1]
+            confirm = input(f"\n{player.name} prepares to attack {target.name}. Press [Enter] to confirm, or any other key to cancel: ")
+            if confirm == "":
+                return target
+            print("Attack cancelled. Returning to selection...")
+        else:
+            print(f"Invalid input. Please enter 1-{len(alive)} or 0.")
 
 def run_player_phase(player_team, enemy_team, auto_mode):
     for player in player_team.alive_units():
         if enemy_team.is_defeated(): return announce_victory(player_team)
-        target = random.choice(enemy_team.alive_units()) if auto_mode else choose_player_target(player, enemy_team)
-        if auto_mode: print(f"\n{player.name} automatically attacks {target.name}")
+        
+        if auto_mode:
+            target = random.choice(enemy_team.alive_units())
+            print(f"\n{player.name} automatically attacks {target.name}")
+        else:
+            target = choose_player_target(player, enemy_team)
+            if target == "withdraw": return "withdrawn"
+            
         resolve_attack(player, target, player_team, "Player")
     return announce_victory(player_team) if enemy_team.is_defeated() else None
 
@@ -278,6 +300,9 @@ def handle_battle_outcome(result, player_team, ai_team):
             return player_team, ai_team, False
         print("Returning to title screen...\n")
         return player_team, ai_team, True
+    if result == "withdrawn":
+        print("\nYou have withdrawn from the battle.")
+        return player_team, ai_team, False
     return player_team, ai_team, False
 
 def run_shop(team):
